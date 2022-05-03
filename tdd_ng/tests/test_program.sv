@@ -233,24 +233,28 @@ program test_program;
     //*********//
     // WAITING //
     //*********//
-    wait (waiting_state==1'b1);
+    @(posedge waiting_state);
     delay_start = $time;
 
     // Read the status register to validate the current state 
-    repeat (2) @(posedge `TH.dut_tdd.inst.up_clk);
-    env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_STATUS), current_state);
+    fork
+      begin
+        repeat (8) @(posedge `TH.dut_tdd.inst.up_clk);
+        env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_STATUS), current_state);
 
-    if (current_state !== 2'b10) begin
-      `ERROR(("Waiting state: Expected 2'b10 found 2'b%b", current_state));
-    end else begin
-      success_count++;
-    end
+        if (current_state !== 2'b10) begin
+          `ERROR(("Waiting state: Expected 2'b10 found 2'b%b", current_state));
+        end else begin
+          success_count++;
+        end
+      end
+    join_none
 
 
     //*********//
     // RUNNING //
     //*********//
-    wait (running_state==1'b1);
+    @(posedge running_state);
     delay_stop = $time;
     read_delay = delay_stop - delay_start;
     expected_delay = (startup_delay+1)*tdd_clk_per;
@@ -265,7 +269,7 @@ program test_program;
     // Read the status register to validate the current state issuing a parallel thread
     fork
       begin
-        repeat (2) @(posedge `TH.dut_tdd.inst.up_clk);
+        repeat (8) @(posedge `TH.dut_tdd.inst.up_clk);
         env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_STATUS), current_state);
 
         if (current_state !== 2'b11) begin
@@ -283,25 +287,23 @@ program test_program;
     //*******//
     // ARMED //
     //*******//
-    wait (armed_state==1'b1);
-
-    // Disable internal sync while changing the polarity
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CONTROL),
-                       `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_SYNC_SOFT(0)|
-                       `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_SYNC_EXT(0)|
-                       `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_SYNC_INT(0)|
-                       `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_SYNC_RST(0)|
-                       `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_ENABLE(1));
-
     // Read the status register to validate the current state 
-    repeat (2) @(posedge `TH.dut_tdd.inst.up_clk);
-    env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_STATUS), current_state);
+    fork
+      begin
+        repeat (8) @(posedge `TH.dut_tdd.inst.up_clk);
+        env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_STATUS), current_state);
 
-    if (current_state !== 2'b01) begin
-      `ERROR(("Armed state: Expected 2'b01 found 2'b%b", current_state));
-    end else begin
-      success_count++;
-    end
+        if (current_state !== 2'b01) begin
+          `ERROR(("Armed state: Expected 2'b01 found 2'b%b", current_state));
+        end else begin
+          success_count++;
+        end
+      end
+    join_any
+
+    // Disable the module to change the polarity
+    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CONTROL),
+                       `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_ENABLE(0));
 
     // Switch to inverted polarity
     env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_POLARITY),
@@ -309,14 +311,7 @@ program test_program;
 
     env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_POLARITY), ch_pol);
 
-    // Disable and re-enable the channels to update the polarity
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_ENABLE),
-                       `SET_TDD_CNTRL_REG_TDD_CH_ENABLE_TDD_CH_ENABLE(32'h00000000));
-
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_ENABLE),
-                       `SET_TDD_CNTRL_REG_TDD_CH_ENABLE_TDD_CH_ENABLE(32'hFFFFFFFF));
-
-    // Re-enable internal sync for transfer triggering
+    // Re-enable the module
     env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CONTROL),
                        `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_SYNC_SOFT(0)|
                        `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_SYNC_EXT(0)|
@@ -328,7 +323,7 @@ program test_program;
     //*********//
     // RUNNING //
     //*********//
-    wait (running_state==1'b1);
+    @(posedge running_state);
 
     // Check the pulse length using a loop on all available channels
     check_pulse_length;
@@ -337,8 +332,6 @@ program test_program;
     //*******//
     // ARMED //
     //*******//
-    wait (armed_state==1'b1);
-
     // Disable the module
     env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CONTROL),
                        `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_ENABLE(0));
@@ -348,13 +341,6 @@ program test_program;
                        `SET_TDD_CNTRL_REG_TDD_CH_POLARITY_TDD_CH_POLARITY(32'h00000000));
 
     env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_POLARITY), ch_pol);
-
-    // Disable and re-enable the channels to update the polarity
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_ENABLE),
-                       `SET_TDD_CNTRL_REG_TDD_CH_ENABLE_TDD_CH_ENABLE(32'h00000000));
-
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_ENABLE),
-                       `SET_TDD_CNTRL_REG_TDD_CH_ENABLE_TDD_CH_ENABLE(32'hFFFFFFFF));
 
 
     //  -------------------------------------------------------
@@ -424,7 +410,7 @@ program test_program;
     //*********//
     // RUNNING //
     //*********//
-    wait (running_state==1'b1);
+    @(posedge running_state);
 
     // Check the pulse length using a loop on all available channels
     check_pulse_length;
@@ -433,20 +419,15 @@ program test_program;
     //*******//
     // ARMED //
     //*******//
-    wait (armed_state==1'b1);
+    // Disable the module
+    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CONTROL),
+                       `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_ENABLE(0));
 
     // Switch to inverted polarity
     env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_POLARITY),
                        `SET_TDD_CNTRL_REG_TDD_CH_POLARITY_TDD_CH_POLARITY(32'hFFFFFFFF));
 
     env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_POLARITY), ch_pol);
-
-    // Disable and re-enable the channels to update the polarity
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_ENABLE),
-                       `SET_TDD_CNTRL_REG_TDD_CH_ENABLE_TDD_CH_ENABLE(32'h00000000));
-
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_ENABLE),
-                       `SET_TDD_CNTRL_REG_TDD_CH_ENABLE_TDD_CH_ENABLE(32'hFFFFFFFF));
 
     // Keep the module enabled; issue a software sync
     env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CONTROL),
@@ -460,7 +441,7 @@ program test_program;
     //*********//
     // RUNNING //
     //*********//
-    wait (running_state==1'b1);
+    @(posedge running_state);
 
     // Check the pulse length using a loop on all available channels
     check_pulse_length;
@@ -469,20 +450,15 @@ program test_program;
     //*******//
     // ARMED //
     //*******//
-    wait (armed_state==1'b1);
+    // Disable the module
+    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CONTROL),
+                       `SET_TDD_CNTRL_REG_TDD_CONTROL_TDD_ENABLE(0));
 
     // Switch to direct polarity
     env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_POLARITY),
                        `SET_TDD_CNTRL_REG_TDD_CH_POLARITY_TDD_CH_POLARITY(32'h00000000));
 
     env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_POLARITY), ch_pol);
-
-    // Disable and re-enable the channels to update the polarity
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_ENABLE),
-                       `SET_TDD_CNTRL_REG_TDD_CH_ENABLE_TDD_CH_ENABLE(32'h00000000));
-
-    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CH_ENABLE),
-                       `SET_TDD_CNTRL_REG_TDD_CH_ENABLE_TDD_CH_ENABLE(32'hFFFFFFFF));
 
 
     //  -------------------------------------------------------
@@ -501,14 +477,14 @@ program test_program;
     //*********//
     // RUNNING //
     //*********//
-    wait (running_state==1'b1);
+    @(posedge running_state);
 
     // Trigger an external sync on the input pin
     // Since the initial software sync started the frame, the external sync will reset the tdd counter
     // Test this by issuing a parralel thread which counts and expects that the number of channel[0] sets per initial frame is 3
     fork
       trigger_ext_event;
-      repeat (3) @(posedge `TH.dut_tdd.inst.genblk1[0].i_channel.ch_set);
+      repeat (3) @(posedge `TH.dut_tdd.inst.genblk1[0].i_channel.tdd_ch_set);
     join
 
     // Check the burst count value, thus validating that the TDD is still transferring the first frame
@@ -547,7 +523,7 @@ program test_program;
     trigger_ext_event;
 
     // Test a continuous burst
-    wait (running_state==1'b1);
+    @(posedge running_state);
 
     ch_en = 32'b1;
 
