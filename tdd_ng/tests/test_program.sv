@@ -510,6 +510,11 @@ program test_program;
 
     env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_BURST_COUNT), burst_count);
 
+    env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_STARTUP_DELAY),
+                       `SET_TDD_CNTRL_REG_TDD_STARTUP_DELAY_TDD_STARTUP_DELAY(0));
+
+    env.mng.RegRead32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_STARTUP_DELAY), startup_delay);
+
 
     // Enable the module with external synchronization actived
     env.mng.RegWrite32(`TDD_NG+GetAddrs(TDD_CNTRL_REG_TDD_CONTROL),
@@ -523,8 +528,6 @@ program test_program;
     trigger_ext_event;
 
     // Test a continuous burst
-    @(posedge running_state);
-
     ch_en = 32'b1;
 
     // Enable the channels one by one
